@@ -1,0 +1,109 @@
+trigger Encore_CandidateDuplicates on Contact (before insert ,before update ) {
+   
+  final String errMsg = 'The email already exists on another Contact ';		//Declare String Variable
+  final String errPMsg = 'The phone already exists on another Contact ';	//Declare String Variable
+  final String errEPMsg = 'The combination of email and phone already exists on another Contact ';	//Declare String Variable
+  
+  Id customerAccountRecordTypeId = Schema.SObjectType.Contact.getRecordTypeInfosByName().get('Candidate').getRecordTypeId(); //get the record type id 
+  
+  Set< String > emailSet = new Set< String >();	// Define a new set 
+  Set< String > mobilePhoneSet = new Set< String >();	// Define a new set
+  
+    for( Contact c : Trigger.new ) 	// 
+    {
+        if(customerAccountRecordTypeId == c.RecordTypeId)	// checking Contact recordtype id with customerAccountRecordTypeId if its equals 
+        {
+            emailSet.add( c.Email );	//adding Email  to Contact
+            mobilePhoneSet.add(c.MobilePhone);	//adding mobile number to contact
+        }
+    }
+
+  Map< String, Id > duplicateContactMap = new Map< String, Id >();	// Define a new map 
+  Map< String, Id > duplicateEmailPhoneMap = new Map< String, Id >();	// Define a new map 
+  Map< String, Id > duplicatePhoneMap = new Map< String, Id >();	// Define a new map 
+  
+  if(!emailSet.isEmpty() || !mobilePhoneSet.isEmpty()) 
+  {
+      for( Contact c : [select Id, Email,MobilePhone,DuplicateCheckField__c from Contact where Email = :emailSet OR MobilePhone =:mobilePhoneSet] )
+      {  
+          String emailPhone = c.Email+'-'+c.MobilePhone;
+          duplicateContactMap.put( c.Email, c.Id );
+          duplicateEmailPhoneMap.put(emailPhone,c.Id);
+          duplicatePhoneMap.put(c.MobilePhone, c. );
+      }
+  }
+  
+  Id duplicateContactId;
+  Id duplicateEPId;
+  Id duplicatePId;
+  
+  for( Contact c : Trigger.new ){
+      system.debug('c----'+c.Email);
+      system.debug('c----'+c.DuplicateCheckField__c);
+    if(customerAccountRecordTypeId == c.RecordTypeId)
+    {  
+         String emailPhonenew = c.Email+'-'+c.MobilePhone;
+         duplicateContactId = duplicateContactMap.get( c.Email );
+         duplicateEPId = duplicateEmailPhoneMap.get(emailPhonenew);
+         duplicatePId = duplicatePhoneMap.get(c.MobilePhone);
+        if(Trigger.isInsert)
+        {
+            system.debug('c----'+c.Email);
+            if(Encore_staticUtility.firstRun)
+            {
+                            
+                system.debug('duplicateContactId--I--'+duplicateContactId);
+                system.debug('duplicateEPId--I--'+duplicateEPId);
+                system.debug('duplicatePId--I--'+duplicatePId);
+                
+                if(duplicateEPId != null)
+                {
+                    c.addError(errEPMsg);
+                    Encore_staticUtility.firstRun = false;
+                }
+                else if( duplicateContactId != null )
+                {
+                    system.debug('duplicatePId----'+duplicatePId);
+                    system.debug('duplicateContactId----'+duplicateContactId);
+                    c.addError(errMsg);
+                    Encore_staticUtility.firstRun = false;
+                }
+                else if(duplicatePId != null)
+                {
+                    c.addError(errPMsg);
+                    Encore_staticUtility.firstRun = false;
+                }
+                else 
+                {
+                    c.AccountId = System.Label.Encore_AccountMappingtoContact;
+                    Encore_staticUtility.firstRun = false;
+                }
+            }
+        }
+        if(Trigger.isUpdate)
+        {
+            system.debug('duplicateContactId--u--'+duplicateContactId+'---'+duplicateEPId);
+            
+            Contact conOld = Trigger.OldMap.get(c.Id);
+            system.debug('conOld--u--'+conOld.Id);
+            system.debug('duplicatePId--u--'+duplicatePId);
+            if(Encore_staticUtility.firstRun)
+            {
+                if( duplicateContactId != null &&  c.Id != duplicateContactId && c.Id == conOld.Id)
+                {
+                    system.debug('cld--u--'+c.Id);
+                    c.addError( errEPMsg);
+                }
+                else if(duplicatePId != null && c.Id != duplicatePId && c.Id == conOld.Id)
+                {
+                    c.addError( errPMsg );
+                }
+                else if(duplicateEPId != null && c.Id != duplicateEPId && c.Id == conOld.Id)
+                {
+                    c.addError( errMsg );
+                }
+            }
+        }
+     }
+  }
+}
